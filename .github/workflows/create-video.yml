@@ -77,7 +77,11 @@ jobs:
         id: upload
         run: |
           cd workspace
-          RESPONSE=$(curl -F "file=@final_video.mp4" "https://file.io/?expires=7d")
-          URL=$(echo "$RESPONSE" | jq -r '.link')
+          echo "📤 Uploading video..."
+          ls -lh final_video.mp4
+          
+          # transfer.sh kullan (daha güvenilir)
+          URL=$(curl --upload-file final_video.mp4 https://transfer.sh/video.mp4)
+          
           echo "video_url=$URL" >> $GITHUB_OUTPUT
           echo "🎬 Video URL: $URL"
