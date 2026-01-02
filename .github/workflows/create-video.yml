@@ -10,6 +10,12 @@ jobs:
     timeout-minutes: 60
     
     steps:
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version
+
       - name: Download images and audio
         run: |
           mkdir -p workspace && cd workspace
@@ -24,13 +30,17 @@ jobs:
           cat scenes.json | jq -r 'to_entries[] | "\(.key) \(.value.audio_url)"' | while read idx url; do
             [ -n "$url" ] && [ "$url" != "null" ] && curl -sL -o "audio_${idx}.mp3" "$url" && echo "✅ Audio $idx"
           done
+          
+          ls -la
 
       - name: Merge audio files
         run: |
           cd workspace
           ls audio_*.mp3 2>/dev/null | sort -V | while read f; do echo "file '$f'"; done > audio_list.txt
-          [ -s audio_list.txt ] && ffmpeg -f concat -safe 0 -i audio_list.txt -c copy merged_audio.mp3 -y
-          echo "✅ Audio merged"
+          if [ -s audio_list.txt ]; then
+            ffmpeg -f concat -safe 0 -i audio_list.txt -c copy merged_audio.mp3 -y
+            echo "✅ Audio merged"
+          fi
 
       - name: Create slideshow with transitions
         run: |
@@ -39,16 +49,16 @@ jobs:
           FADE=${{ github.event.client_payload.fade_duration || 1 }}
           
           # Her görseli klibe çevir
-          for img in $(ls image_*.jpg | sort -V); do
+          for img in $(ls image_*.jpg 2>/dev/null | sort -V); do
             idx=$(echo "$img" | grep -oP '\d+')
             ffmpeg -loop 1 -i "$img" -c:v libx264 -t $DURATION -pix_fmt yuv420p \
-              -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fade=t=in:st=0:d=$FADE,fade=t=out:st=$(($DURATION-$FADE)):d=$FADE" \
+              -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fade=t=in:st=0:d=$FADE,fade=t=out:st=$((DURATION-FADE)):d=$FADE" \
               -r 30 "clip_${idx}.mp4" -y
-            echo "✅ Clip $idx"
+            echo "✅ Clip $idx created"
           done
           
           # Klipleri birleştir
-          ls clip_*.mp4 | sort -V | while read f; do echo "file '$f'"; done > clips.txt
+          ls clip_*.mp4 2>/dev/null | sort -V | while read f; do echo "file '$f'"; done > clips.txt
           ffmpeg -f concat -safe 0 -i clips.txt -c copy video_only.mp4 -y
           echo "✅ Video created"
 
@@ -71,10 +81,3 @@ jobs:
           URL=$(echo "$RESPONSE" | jq -r '.link')
           echo "video_url=$URL" >> $GITHUB_OUTPUT
           echo "🎬 Video URL: $URL"
-
-      - name: Callback to n8n
-        if: ${{ github.event.client_payload.callback_url }}
-        run: |
-          curl -X POST "${{ github.event.client_payload.callback_url }}" \
-            -H "Content-Type: application/json" \
-            -d '{"status":"completed","video_url":"${{ steps.upload.outputs.video_url }}"}'
