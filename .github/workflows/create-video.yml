@@ -21,12 +21,10 @@ jobs:
           mkdir -p workspace && cd workspace
           echo '${{ toJson(github.event.client_payload.scenes) }}' > scenes.json
           
-          # Görselleri indir
           cat scenes.json | jq -r 'to_entries[] | "\(.key) \(.value.image_url)"' | while read idx url; do
             [ -n "$url" ] && [ "$url" != "null" ] && curl -sL -o "image_${idx}.jpg" "$url" && echo "✅ Image $idx"
           done
           
-          # Sesleri indir
           cat scenes.json | jq -r 'to_entries[] | "\(.key) \(.value.audio_url)"' | while read idx url; do
             [ -n "$url" ] && [ "$url" != "null" ] && curl -sL -o "audio_${idx}.mp3" "$url" && echo "✅ Audio $idx"
           done
@@ -48,7 +46,6 @@ jobs:
           DURATION=${{ github.event.client_payload.duration_per_image || 30 }}
           FADE=${{ github.event.client_payload.fade_duration || 1 }}
           
-          # Her görseli klibe çevir
           for img in $(ls image_*.jpg 2>/dev/null | sort -V); do
             idx=$(echo "$img" | grep -oP '\d+')
             ffmpeg -loop 1 -i "$img" -c:v libx264 -t $DURATION -pix_fmt yuv420p \
@@ -57,7 +54,6 @@ jobs:
             echo "✅ Clip $idx created"
           done
           
-          # Klipleri birleştir
           ls clip_*.mp4 2>/dev/null | sort -V | while read f; do echo "file '$f'"; done > clips.txt
           ffmpeg -f concat -safe 0 -i clips.txt -c copy video_only.mp4 -y
           echo "✅ Video created"
@@ -78,9 +74,8 @@ jobs:
         run: |
           cd workspace
           echo "📤 Uploading video..."
-          ls -lh final_video.mp4
           
-          # transfer.sh kullan (daha güvenilir)
+          # transfer.sh kullan
           URL=$(curl --upload-file final_video.mp4 https://transfer.sh/video.mp4)
           
           echo "video_url=$URL" >> $GITHUB_OUTPUT
